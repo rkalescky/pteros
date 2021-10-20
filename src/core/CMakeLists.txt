@@ -47,8 +47,8 @@ add_library(pteros SHARED
     ${PROJECT_SOURCE_DIR}/include/pteros/core/force_field.h
     force_field.cpp
 
-    ${PROJECT_SOURCE_DIR}/include/pteros/core/atom_proxy.h
-    atom_proxy.cpp
+    ${PROJECT_SOURCE_DIR}/include/pteros/core/atom_handler.h
+    atom_handler.cpp
 
     ${PROJECT_SOURCE_DIR}/include/pteros/core/system.h
     system.cpp
@@ -62,9 +62,6 @@ add_library(pteros SHARED
     ${PROJECT_SOURCE_DIR}/include/pteros/core/periodic_box.h
     periodic_box.cpp
 
-    #SASA (will be empty if not used)
-    ${SASA_FILES}
-
     #DSSP wrapper
     pteros_dssp_wrapper.cpp
     pteros_dssp_wrapper.h
@@ -75,7 +72,6 @@ add_subdirectory(distance_search)
 add_subdirectory(selection_parser)
 
 #Add SASA code
-
 if(WITH_POWERSASA)
     # Set definition for conditional compilation
     target_compile_definitions(pteros PRIVATE USE_POWERSASA)
@@ -86,7 +82,7 @@ if(WITH_POWERSASA)
         ${PROJECT_SOURCE_DIR}/thirdparty/powersasa/power_diagram.h
         ${PROJECT_SOURCE_DIR}/thirdparty/powersasa/power_sasa.h
     )
-    message(STATUS "POWERSASA code is used! Licence restrictions are described here: src/thirdparty/sasa/LICENSE")
+    message(NOTICE "POWERSASA code is used! Licence restrictions are described here: src/thirdparty/sasa/LICENSE")
 endif()
 
 target_link_libraries(pteros
@@ -98,7 +94,7 @@ target_link_libraries(pteros
     PUBLIC
         Eigen3::Eigen
         spdlog::spdlog
-        Boost::boost Boost::system Boost::date_time Boost::filesystem
+        #fmt::fmt
 )
 
 if(WITH_OPENMP AND OpenMP_CXX_FOUND)
@@ -111,9 +107,16 @@ target_include_directories(pteros PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-set_property(TARGET pteros
-    PROPERTY CXX_STANDARD 14
-    PROPERTY CXX_STANDARD_REQUIRED ON
+# Precompile some headers
+target_precompile_headers(pteros PRIVATE
+    <string>
+    <memory>
+    <map>
+    <vector>
+    <functional>
+    <Eigen/Core>
+    ${PROJECT_SOURCE_DIR}/include/pteros/core/selection.h
+    ${PROJECT_SOURCE_DIR}/include/pteros/core/system.h
 )
 
 #--------------

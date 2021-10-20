@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -26,37 +26,29 @@
  *
 */
 
+#include "system_builder.h"
+
+using namespace std;
+using namespace pteros;
 
 
-#ifndef ATOMIC_WRAPPER_H_INCLUDED
-#define ATOMIC_WRAPPER_H_INCLUDED
+SystemBuilder::~SystemBuilder()
+{
 
-#include <atomic>
+}
 
-// Wrapper over std::atomic to make it usable in std::vector
-template <typename T>
-struct atomic_wrapper {
-  std::atomic<T> _a;
+void SystemBuilder::allocate_atoms(int n){
+    sys->atoms.resize(n);
+}
 
-  atomic_wrapper():_a(){}
+void SystemBuilder::set_atom(int i, const Atom &at){
+    sys->atoms[i] = at;
+}
 
-  atomic_wrapper(const std::atomic<T> &a):_a(a.load()){}
+Atom& SystemBuilder::atom(int i){
+    return sys->atoms[i];
+}
 
-  atomic_wrapper(const atomic_wrapper &other):_a(other._a.load()){}
-
-  atomic_wrapper &operator=(const atomic_wrapper &other){
-    _a.store(other._a.load());
-  }
-
-  T load(){
-      return _a.load();
-  }
-
-  void store(const T& v){
-      _a.store(v);
-  }
-};
-
-#endif
-
-
+void SystemBuilder::add_atom(const Atom &at){
+    sys->atoms.push_back(at);
+}

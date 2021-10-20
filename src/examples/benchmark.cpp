@@ -40,8 +40,9 @@ protected:
 
     virtual void process_frame(const Frame_info& info) override {
         vector<Eigen::Vector2i> bon;
+        vector<float> dist;
         bon.clear();
-        search_contacts(0.5,sel1,sel2,bon,true);
+        search_contacts(0.5,sel1,sel2,bon,dist,true,noPBC);
 
         cout << "frame " << info.valid_frame << " bonds: " << bon.size() << endl;        
     }
@@ -81,7 +82,7 @@ int main(int argc, char** argv){
     int num = options("bench").as_int();
     cout << num << endl;
     if(num>3){
-        System s("/home/semen/work/Projects/kornelyuk/Sasha/dimer_md/1/dimer_pdb2gmx.gro");
+        System s("dimer_pdb2gmx.gro");
         Selection sel(s,std::string("all"));
 
         std::clock_t start;

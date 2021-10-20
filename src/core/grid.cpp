@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This file is a part of
  *
  * ============================================
@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,7 +27,6 @@
 */
 
 
-
 #include "pteros/core/grid.h"
 #include "pteros/core/pteros_error.h"
 
@@ -38,18 +37,16 @@ using namespace Eigen;
 void Grid::clear()
 {    
     int i,j,k;
-    for(i=0;i<data.shape()[0];++i)
-        for(j=0;j<data.shape()[1];++j)
-            for(k=0;k<data.shape()[2];++k){
-                data[i][j][k].clear();
-        }
-
-    wrapped_atoms.clear();
+    for(i=0;i<data.dimension(0);++i)
+        for(j=0;j<data.dimension(1);++j)
+            for(k=0;k<data.dimension(2);++k){
+                data(i,j,k).clear();
+        }    
 }
 
 void Grid::resize(int X, int Y, int Z)
 {
-    data.resize( boost::extents[X][Y][Z] );
+    data.resize(X,Y,Z);
     clear();
 }
 
@@ -61,11 +58,11 @@ void Grid::populate(const Selection &sel, bool abs_index)
 }
 
 void Grid::populate(const Selection &sel, Vector3f_const_ref min, Vector3f_const_ref max, bool abs_index)
-{
+{    
     int Natoms = sel.size();
-    int NX = data.shape()[0];
-    int NY = data.shape()[1];
-    int NZ = data.shape()[2];
+    int NX = data.dimension(0);
+    int NY = data.dimension(1);
+    int NZ = data.dimension(2);
     int n1,n2,n3;
 
     // Non-periodic variant
@@ -84,61 +81,63 @@ void Grid::populate(const Selection &sel, Vector3f_const_ref min, Vector3f_const
         if(n3<0 || n3>=NZ) continue;
 
         if(abs_index){
-            cell(n1,n2,n3).emplace_back(sel.index(i),coor);
+            cell(n1,n2,n3).add_point(sel.index(i),*coor);
         } else {
-            cell(n1,n2,n3).emplace_back(i,coor);
-        }
+            cell(n1,n2,n3).add_point(i,*coor);
+        }        
     }
 }
 
-void Grid::populate_periodic(const Selection &sel, bool abs_index)
+void Grid::populate_periodic(const Selection &sel, Vector3i_const_ref pbc_dims, bool abs_index)
 {
-    populate_periodic(sel, sel.box(), abs_index);
+    populate_periodic(sel, sel.box(), pbc_dims, abs_index);
 }
 
-void Grid::populate_periodic(const Selection &sel, const Periodic_box &box, bool abs_index)
+void Grid::populate_periodic(const Selection &sel, const PeriodicBox &box, Vector3i_const_ref pbc_dims, bool abs_index)
 {
+    if( pbc_dims(0)==0 && pbc_dims(1)==0 && pbc_dims(2)==0 )
+        throw PterosError("No periodic dimensions specified for periodic grid!");
+
     int Natoms = sel.size();
-    int NX = data.shape()[0];
-    int NY = data.shape()[1];
-    int NZ = data.shape()[2];
+    int NX = data.dimension(0);
+    int NY = data.dimension(1);
+    int NZ = data.dimension(2);
     int n1,n2,n3;
 
     // Periodic variant
-    Vector3f coor;
-    Vector3f* ptr;
+    Vector3f coor;    
     Matrix3f m_inv = box.get_inv_matrix();
 
     for(int i=0;i<Natoms;++i){
         coor = sel.xyz(i);
         // See if atom i is in box and wrap if needed
         if( !box.in_box(coor) ){
-            box.wrap_point(coor);
-            wrapped_atoms.push_back(coor);
-            ptr = &*wrapped_atoms.rbegin();
-        } else {
-            ptr = sel.xyz_ptr(i);
+            box.wrap_point(coor,pbc_dims);
         }
 
         // Now we are sure that coor is wrapped
         // Get relative coordinates in box [0:1)
-        coor = m_inv*coor;
+        Vector3f coor_rel = m_inv*coor;
+        n1 = floor(NX*coor_rel(0));
+        n2 = floor(NY*coor_rel(1));
+        n3 = floor(NZ*coor_rel(2));
 
-        n1 = floor(NX*coor(0));
-        n2 = floor(NY*coor(1));
-        n3 = floor(NZ*coor(2));
-
+        // For non-periodic dims skip points outside the box
         // if coor(i) is 1.000001 or -0.00001 due to numerucal errors correct manually
+
+        if(!pbc_dims(0) && (n1>=NX || n1<0)) continue;
         if(n1>=NX)
             n1=NX-1;
         else if(n1<0)
             n1=0;
 
+        if(!pbc_dims(1) && (n2>=NY || n2<0)) continue;
         if(n2>=NY)
             n2=NY-1;
         else if(n2<0)
             n2=0;
 
+        if(!pbc_dims(2) && (n3>=NZ || n3<0)) continue;
         if(n3>=NZ)
             n3=NZ-1;
         else if(n3<0)
@@ -146,11 +145,23 @@ void Grid::populate_periodic(const Selection &sel, const Periodic_box &box, bool
 
         // Assign to grid
         if(abs_index){
-            cell(n1,n2,n3).emplace_back(sel.index(i),ptr);
+            cell(n1,n2,n3).add_point(sel.index(i),coor);
         } else {
-            cell(n1,n2,n3).emplace_back(i,ptr);
+            cell(n1,n2,n3).add_point(i,coor);
         }
     }
+}
+
+
+
+void GridCell::add_point(int ind, Vector3f_const_ref crd){
+    indexes.push_back(ind);
+    coords.push_back(crd);
+}
+
+void GridCell::clear(){
+    indexes.clear();
+    coords.clear();
 }
 
 

@@ -2,13 +2,7 @@
 //auto FLOAT = g.rule() << INTEGER << (any_char("eE") << INTEGER)('?')
 
 #include <pteros/pteros.h>
-#include <pteros/core/mol_file.h>
-#include <map>
-#include <string>
-#include <iostream>
-#include <functional>
-#include <memory>
-#include <variant>
+#include "pteros/extras/voronoi_packing.h"
 
 using namespace pteros;
 using namespace std;
@@ -16,19 +10,15 @@ using namespace Eigen;
 
 
 int main(int argc, char* argv[]){
-    LOG()->set_level(spdlog::level::debug);
-    string path="/home/semen/work/stored/Projects/SquaMem/new_bending/cyl_DOPC/R100/";
-    std::unique_ptr<Mol_file> h = Mol_file::open(path+"nojump.xtc",'r');
-
-    int fr;
-    float t;
-
-    h->seek_frame(19);
-    h->tell_current_frame_and_time(fr,t);
-    cout << fr << " " << t << endl;
-
-    h->seek_time(128010);
-    h->tell_current_frame_and_time(fr,t);
-    cout << fr << " " << t << endl;
-
+    System s("/home/semen/work/CLCK/CLCKa/r1.gro");
+    vector<Selection> sels;
+    sels.emplace_back(s("protein"));
+    sels.emplace_back(s("resname POPC"));
+    sels.emplace_back(s("resname CHL1"));
+    sels.emplace_back(s("resname TIP3"));
+    sels.emplace_back(s("resname SOD"));
+    sels.emplace_back(s("resname CLA"));
+    
+    Voronoi3D voro(sels);
+    voro.compute();
 }

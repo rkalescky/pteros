@@ -1,6 +1,6 @@
 #include "pteros/pteros.h"
 #include <Eigen/Core>
-#include "spdlog/fmt/ostr.h"
+#include "fmt/ostream.h"
 #include "pteros/core/utilities.h"
 #include "pteros/extras/solvate.h"
 
@@ -66,7 +66,7 @@ int main(int argc, char* argv[]){
         LOG()->info("Writing output to '{}'...", out);
         solute().write(out);
 
-    } catch(const Pteros_error& e) {
+    } catch(const PterosError& e) {
         LOG()->error(e.what());
     }
 }

@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,27 +27,20 @@
 */
 
 
+#include "bindings_util.h"
+#include "pteros/extras/voronoi_packing.h"
 
-#include "search_utils.h"
+namespace py = pybind11;
+using namespace pteros;
+using namespace pybind11::literals;
 
-// Get intersection of two 1d bars
-void overlap_1d(float a1, float a2, float b1, float b2, float& res1, float& res2){
-    res1 = res2 = 0.0;
-    if(a1<b1){
-        if(a2<b1){
-            return; // No overlap
-         } else { //a2>b1
-            res1 = b1;
-            if(a2<b2) res2=a2; else res2=b2;
-        }
-    } else { //a1>b1
-        if(a1>b2){
-            return; //No overlap
-        } else { //a1<b2
-            res1 = a1;
-            if(a2>b2) res2=b2; else res2=a2;
-        }
-    }
+void make_bindings_Voronoi3D(py::module& m){
+
+    py::class_<Voronoi3D>(m,"Voronoi3D")
+        .def(py::init<const std::vector<Selection>&>())
+        .def("compute",&Voronoi3D::compute)        
+        .def("write_stats",&Voronoi3D::write_stats)
+    ;
 }
 
 

@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,15 +27,15 @@
 */
 
 
-
 #include "pteros/core/system.h"
 #include "pteros/core/pteros_error.h"
 #include "pteros/core/distance_search.h"
 #include "pteros/core/force_field.h"
+#include "pteros/core/utilities.h"
 #include <cmath>
 #include <functional>
 #include "pteros/core/logging.h"
-#include <boost/algorithm/string.hpp>
+
 
 using namespace std;
 using namespace pteros;
@@ -51,7 +51,7 @@ Vector3f get_shift_coefs(int alpha, float r1, float rc){
 
 
 // Plain LJ kernel
-float LJ_en_kernel(float C6, float C12, float r, const Force_field& ff){
+float LJ_en_kernel(float C6, float C12, float r, const ForceField& ff){
     float r_inv = 1.0/r;
     float tmp = r_inv*r_inv; // (1/r)^2
     tmp = tmp*tmp*tmp; // (1/r)^6
@@ -59,7 +59,7 @@ float LJ_en_kernel(float C6, float C12, float r, const Force_field& ff){
 }
 
 // Cutoff LJ kernel
-float LJ_en_kernel_cutoff(float C6, float C12, float r, const Force_field& ff){
+float LJ_en_kernel_cutoff(float C6, float C12, float r, const ForceField& ff){
     if(r>ff.rvdw) return 0.0;
     float r_inv = 1.0/r;
     float tmp = r_inv*r_inv; // (1/r)^2
@@ -68,7 +68,7 @@ float LJ_en_kernel_cutoff(float C6, float C12, float r, const Force_field& ff){
 }
 
 // Shifted LJ kernel
-float LJ_en_kernel_shifted(float C6, float C12, float r, const Force_field& ff){
+float LJ_en_kernel_shifted(float C6, float C12, float r, const ForceField& ff){
     if(r>ff.rvdw) return 0.0;
 
     float val12 = pow(r,-12)
@@ -87,24 +87,24 @@ float LJ_en_kernel_shifted(float C6, float C12, float r, const Force_field& ff){
 #define ONE_4PI_EPS0      138.935456
 
 // Plane Coulomb kernel
-float Coulomb_en_kernel(float q1, float q2, float r, const Force_field& ff){
+float Coulomb_en_kernel(float q1, float q2, float r, const ForceField& ff){
     return ff.coulomb_prefactor*q1*q2/r;
 }
 
 // Cutoff Coulomb kernel
-float Coulomb_en_kernel_cutoff(float q1, float q2, float r, const Force_field& ff){
+float Coulomb_en_kernel_cutoff(float q1, float q2, float r, const ForceField& ff){
     if(r>ff.rcoulomb) return 0.0;
     return ff.coulomb_prefactor*q1*q2/r;
 }
 
 
 // Reaction field Coulomb kernel
-float Coulomb_en_kernel_rf(float q1, float q2, float r, const Force_field& ff){
+float Coulomb_en_kernel_rf(float q1, float q2, float r, const ForceField& ff){
     return ff.coulomb_prefactor*q1*q2*(1.0/r + ff.k_rf*r*r - ff.c_rf);
 }
 
 // Shifted Coulomb kernel
-float Coulomb_en_kernel_shifted(float q1, float q2, float r, const Force_field& ff){
+float Coulomb_en_kernel_shifted(float q1, float q2, float r, const ForceField& ff){
     return ff.coulomb_prefactor*q1*q2*( 1.0/r
                                      -(ff.shift_1(0)/3.0)*pow(r-ff.rcoulomb_switch,3)
                                      -(ff.shift_1(1)/4.0)*pow(r-ff.rcoulomb_switch,4)
@@ -113,10 +113,9 @@ float Coulomb_en_kernel_shifted(float q1, float q2, float r, const Force_field& 
 }
 
 
+#define LOWER(s) str_to_lower_copy(s)
 
-#define LOWER(s) boost::algorithm::to_lower_copy(string(s))
-
-void Force_field::setup_kernels(){    
+void ForceField::setup_kernels(){    
     LOG()->debug("Coulomb type: {}",coulomb_type);
     LOG()->debug("Coulomb modifier: {}",coulomb_modifier);
     LOG()->debug("VdW type: {}",vdw_type);
@@ -181,7 +180,7 @@ void Force_field::setup_kernels(){
 }
 
 
-Vector2f Force_field::pair_energy(int at1, int at2, float r, float q1, float q2, int type1, int type2)
+Vector2f ForceField::pair_energy(int at1, int at2, float r, float q1, float q2, int type1, int type2)
 {
     float c6,c12;
     // indexes have to be in increasing order
@@ -207,13 +206,13 @@ Vector2f Force_field::pair_energy(int at1, int at2, float r, float q1, float q2,
     }
 }
 
-float Force_field::get_cutoff(){
+float ForceField::get_cutoff(){
     return std::min(rcoulomb,rvdw);
 }
 
-Force_field::Force_field():  ready(false) {}
+ForceField::ForceField():  ready(false) {}
 
-Force_field::Force_field(const Force_field &other){
+ForceField::ForceField(const ForceField &other){
     exclusions = other.exclusions;
     molecules = other.molecules;
     bonds = other.bonds;
@@ -239,7 +238,7 @@ Force_field::Force_field(const Force_field &other){
     if(ready) setup_kernels();
 }
 
-Force_field &Force_field::operator=(Force_field other){    
+ForceField &ForceField::operator=(ForceField other){    
     exclusions = other.exclusions;
     molecules = other.molecules;
     bonds = other.bonds;
@@ -267,7 +266,7 @@ Force_field &Force_field::operator=(Force_field other){
     return *this;
 }
 
-void Force_field::clear(){    
+void ForceField::clear(){    
     exclusions.clear();
     LJ_C6.fill(0.0);
     LJ_C12.fill(0.0);
@@ -279,5 +278,3 @@ void Force_field::clear(){
 
     ready = false;
 }
-
-

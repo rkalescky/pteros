@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,13 +27,11 @@
 */
 
 
-
 #include "pteros/analysis/options.h"
 #include "pteros/core/pteros_error.h"
-#include "boost/lexical_cast.hpp"
-#include <boost/algorithm/string.hpp> // For to_lower
+#include "pteros/core/utilities.h"
+#include <charconv>
 #include <sstream>
-
 
 using namespace std;
 using namespace pteros;
@@ -59,7 +57,7 @@ void parse_command_line(int argc, char** argv,
     for(int i=1;i<argc;++i){        
         string str(argv[i]);
 
-        if(str=="-") throw Pteros_error("Lone '-'!");
+        if(str=="-") throw PterosError("Lone '-'!");
 
         //See if token contains '-' as first symbol not followed by number
         if(str[0]=='-' && str.size()>1 && !isdigit(str[1]) ){
@@ -79,10 +77,10 @@ void parse_command_line(int argc, char** argv,
 
             // See if we got task tag
             if(str==task_tag){
-                if(i==argc-1) throw Pteros_error("Incomplete task at the end of command line!");
+                if(i==argc-1) throw PterosError("Incomplete task at the end of command line!");
                 // If we already been in task mode, then end old task
                 if(in_task){
-                    if(tsk.task_name=="") throw Pteros_error("Task without name after {}!",argv[i-1]);
+                    if(tsk.task_name=="") throw PterosError("Task without name after {}!",argv[i-1]);
                     tasks.push_back(tsk);
                 }
                 in_task = true;
@@ -100,10 +98,10 @@ void parse_command_line(int argc, char** argv,
             o.data.clear();
         } else {
             // This is value
-            if(!has_key && !in_task) throw Pteros_error("Error! Found value '{}' without option name!",str);
+            if(!has_key && !in_task) throw PterosError("Error! Found value '{}' without option name!",str);
             if(!has_key && in_task){
                 // This is task name
-                if(tsk.task_name!="") throw Pteros_error("Error: double task name '{}'",str);
+                if(tsk.task_name!="") throw PterosError("Error: double task name '{}'",str);
                 tsk.task_name = str;
                 if(i==argc-1) tasks.push_back(tsk);
                 continue;
@@ -162,8 +160,8 @@ const Option& Options::operator()(std::string key) const {
             ++found;
         }
     }
-    if(found==0) throw Pteros_error("Key '{}' not found!", key);
-    if(found>1) throw Pteros_error("More than one key '{}' found!", key);
+    if(found==0) throw PterosError("Key '{}' not found!", key);
+    if(found>1) throw PterosError("More than one key '{}' found!", key);
     return data[ind];
 }
 
@@ -176,7 +174,7 @@ const Option& Options::operator()(std::string key, std::string default_val) {
             ++found;
         }
     }
-    if(found>1) throw Pteros_error("More than one key '{}' found!",key);
+    if(found>1) throw PterosError("More than one key '{}' found!",key);
     if(found==0 || data[ind].data.empty()){
         // Default value case
         Option tmp;
@@ -207,7 +205,7 @@ bool pteros::Options::has(string key)
             ++found;
         }
     }
-    if(found>1) throw Pteros_error("More than one key '{}' found!",key);
+    if(found>1) throw PterosError("More than one key '{}' found!",key);
     if(found==0)
         return false;
     else
@@ -218,77 +216,58 @@ bool pteros::Options::has(string key)
 //----------------------------------------------------------------
 
 int Option::as_int() const {
-    if(data.size()!=1) throw Pteros_error("Only one INT value expected for key '{}'!",name);
-    try {
-        return boost::lexical_cast<int>(data[0]);
-    } catch(boost::bad_lexical_cast){
-        throw Pteros_error("Value '{}' is not INT!",data[0]);
-    }
+    if(data.size()!=1) throw PterosError("Only one INT value expected for key '{}'!",name);
+    return str_to_int(data[0]);
 }
 
 float Option::as_float() const {
-    if(data.size()!=1) throw Pteros_error("Only one FLOAT value expected for key '{}'!",name);
-    try {
-        return boost::lexical_cast<float>(data[0]);
-    } catch(boost::bad_lexical_cast){
-        throw Pteros_error("Value '{}' is not FLOAT!",data[0]);
-    }
+    if(data.size()!=1) throw PterosError("Only one FLOAT value expected for key '{}'!",name);
+    return str_to_float(data[0]);
 }
 
 bool Option::as_bool() const {
-    if(data.size()!=1) throw Pteros_error("Only one BOOL value expected for key '{}'!",name);
+    if(data.size()!=1) throw PterosError("Only one BOOL value expected for key '{}'!",name);
     string s(data[0]);
-    boost::algorithm::to_lower(s);
+    str_to_lower_in_place(s);
+
     if(s=="true"){
         return true;
     } else if(s=="false"){
         return false;
     } else {
-        throw Pteros_error("Value '{}' is not BOOL!",s);
+        throw PterosError("Value '{}' is not BOOL!",s);
     }
 
 }
 
 string Option::as_string() const {        
-    if(data.size()!=1) throw Pteros_error("Only one STRING value expected for key '{}'!",name);
+    if(data.size()!=1) throw PterosError("Only one STRING value expected for key '{}'!",name);
     return data[0];
 }
 
 vector<int> Option::as_ints() const {
-    if(data.empty()) throw Pteros_error("One or more INT values are expected for key '{}'!",name);
+    if(data.empty()) throw PterosError("One or more INT values are expected for key '{}'!",name);
     vector<int> res;
     for(auto& str: data){
-        try {
-            res.push_back( boost::lexical_cast<int>(str) );
-        } catch(boost::bad_lexical_cast){
-            throw Pteros_error("Value '{}' is not INT!",str);
-        }
+        res.push_back( str_to_int(str) );
     }
     return res;
 }
 
 vector<float> Option::as_floats() const {
-    if(data.empty()) throw Pteros_error("One or more FLOAT values are expected for key '{}'!",name);
+    if(data.empty()) throw PterosError("One or more FLOAT values are expected for key '{}'!",name);
     vector<float> res;
     for(auto& str: data){
-        try {
-            res.push_back( boost::lexical_cast<float>(str) );
-        } catch(boost::bad_lexical_cast){
-            throw Pteros_error("Value '{}' is not FLOAT!",str);
-        }
+        res.push_back( str_to_float(str) );
     }
     return res;
 }
 
 Eigen::VectorXf Option::as_VectorXf() const {
-    if(data.empty()) throw Pteros_error("One or more FLOAT values are expected for key '{}'!",name);
+    if(data.empty()) throw PterosError("One or more FLOAT values are expected for key '{}'!",name);
     vector<float> vec;
     for(auto& str: data){
-        try {
-            vec.push_back( boost::lexical_cast<float>(str) );
-        } catch(boost::bad_lexical_cast){
-            throw Pteros_error("Value '{}' is not FLOAT!",str);
-        }
+        vec.push_back( str_to_float(str) );
     }
     Eigen::VectorXf res(vec.size());
     for(int i=0;i<vec.size();++i) res(i)=vec[i];
@@ -297,24 +276,26 @@ Eigen::VectorXf Option::as_VectorXf() const {
 
 
 vector<bool> Option::as_bools() const {
-    if(data.empty()) throw Pteros_error("One or more BOOL values are expected for key '{}'!",name);
+    if(data.empty()) throw PterosError("One or more BOOL values are expected for key '{}'!",name);
     vector<bool> res;
     for(auto s: data){
-        boost::algorithm::to_lower(s);
+        str_to_lower_in_place(s);
         if(s=="true"){
             res.push_back(true);
         } else if(s=="false"){
             res.push_back(false);
         } else {
-            throw Pteros_error("Value '{}' is not BOOL!",s);
+            throw PterosError("Value '{}' is not BOOL!",s);
         }
     }
     return res;
 }
 
 vector<string> Option::as_strings() const {
-    if(data.empty()) throw Pteros_error("One or more STRING values are expected for key '{}'!",name);
+    if(data.empty()) throw PterosError("One or more STRING values are expected for key '{}'!",name);
     return data;
 }
+
+
 
 

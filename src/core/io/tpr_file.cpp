@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -29,6 +29,7 @@
 #include "tpr_file.h"
 #include "pteros/core/pteros_error.h"
 #include "pteros/core/logging.h"
+#include "system_builder.h"
 
 #include "gromacs/fileio/tpxio.h"
 #include "gromacs/mdtypes/inputrec.h"
@@ -37,16 +38,20 @@
 #include "gromacs/topology/mtop_util.h"
 #include "gromacs/topology/idef.h"
 
+// Generated version infor file
+#include "gromacs_version_info.h"
+
+#if (GROMACS_VERSION > 2020)
+#include "gromacs/mdtypes/md_enums.h"
+#endif
+
+
 using namespace std;
 using namespace pteros;
 using namespace Eigen;
 
 
-TPR_file::~TPR_file(){
-}
-
-
-string coulomb_names[] = {"Cut-off", "Reaction-Field", "Generalized-Reaction-Field",
+string coulomb_names[] = {"Cut-off","Reaction-Field", "Generalized-Reaction-Field",
                           "PME", "Ewald", "P3M-AD", "Poisson", "Switch", "Shift", "User",
                           "Generalized-Born", "Reaction-Field-nec", "Encad-shift",
                           "PME-User", "PME-Switch", "PME-User-Switch",
@@ -58,13 +63,18 @@ string mod_names[] = {"Potential-shift-Verlet", "Potential-shift", "None", "Pote
                       "Exact-cutoff", "Force-switch"};
 
 
-void TPR_file::open(char open_mode)
+void TprFile::open(char open_mode)
 {
     if(open_mode=='w')
-        throw Pteros_error("TPR files could not be written!");
+        throw PterosError("TPR files could not be written!");
 }
 
-bool TPR_file::do_read(System *sys, Frame *frame, const Mol_file_content &what){
+void TprFile::close()
+{
+
+}
+
+bool TprFile::do_read(System *sys, Frame *frame, const FileContent &what){
     t_inputrec ir;    
     gmx_mtop_t mtop;
     t_topology top;
@@ -73,7 +83,7 @@ bool TPR_file::do_read(System *sys, Frame *frame, const Mol_file_content &what){
     read_tpx_state(fname.c_str(), &ir, &state, &mtop);
 
     // Only works for Gromacs>=2018.x
-    top = gmx_mtop_t_to_t_topology(&mtop,true);
+    top = gmx_mtop_t_to_t_topology(&mtop,false);
 
     natoms = top.atoms.nr;
 
@@ -81,6 +91,8 @@ bool TPR_file::do_read(System *sys, Frame *frame, const Mol_file_content &what){
         frame->coord.resize(natoms);
         if(what.coord()) frame->box.set_matrix(Map<Matrix3f>((float*)&state.box,3,3));
     }
+
+    SystemBuilder builder(sys);
 
     // Read atoms and coordinates
     for(int i=0;i<natoms;++i){
@@ -106,16 +118,18 @@ bool TPR_file::do_read(System *sys, Frame *frame, const Mol_file_content &what){
 
         if(what.atoms()){
             // Add atoms to system
-            append_atom_in_system(*sys,at);
+            builder.add_atom(at);
         } else {
             // Update atoms in system
-            atom_in_system(*sys,i) = at;
+            builder.atom(i) = at;
         }
     }
 
+    if(what.atoms()) sys->assign_resindex();
+
     // Read topology
     if(what.top()){
-        Force_field& ff = sys->get_force_field();
+        ForceField& ff = sys->get_force_field();
         ff.bonds.clear();
 
         ff.natoms = natoms;
@@ -226,18 +240,47 @@ bool TPR_file::do_read(System *sys, Frame *frame, const Mol_file_content &what){
         }
 
         // Exclusions
+
+        // Starting from Gromacs 2021 exclusions are removed from global top
+#if (GROMACS_VERSION <= 2020)
         ff.exclusions.resize(natoms);
         int b,e;
         for(int i=0; i<top.excls.nr; ++i){
-            //cout << top.excls.index[i] << " " << top.excls.index[i+1]-1 << endl;
             b = top.excls.a[top.excls.index[i]];
             e = top.excls.a[top.excls.index[i+1]-1];
             for(int j=b; j<e; ++j){
                 //cout << i << " " << j << endl;
                 if(j!=i) ff.exclusions[i].insert(j);
             }
-            //LOG()->info("{}:{}",top.excls.a[top.excls.index[i]],top.excls.a[top.excls.index[i+1]-1]);
         }
+#else
+
+        // Extract exclusions from molecular blocks
+        ff.exclusions.resize(natoms);
+        // Running global index of atoms
+        size_t global_counter = 0;
+        // Cycle over molecular blocks
+        for(size_t bl=0; bl<mtop.molblock.size();++bl){
+            // Mol type
+            size_t mol_t = mtop.molblock[bl].type;
+            // Cycle over molecules in this block
+            for(size_t mol=0; mol<mtop.molblock[bl].nmol; ++mol){
+                // cycle over atoms in one molecule
+                for(size_t a=0; a<mtop.moltype[mol_t].excls.size(); ++a){
+                    // Go over the list of excluded local indexes for this atom
+                    for(size_t ind=0; ind<mtop.moltype[mol_t].excls[a].size(); ++ind){
+                        // Global excluded indes for local atom a
+                        size_t global_excl = mtop.moltype[mol_t].excls[a][ind] + global_counter;
+                        // Add this exclusion
+                        ff.exclusions[global_counter].insert(global_excl);
+                    }
+                    // Increment global atom counter
+                    ++global_counter;
+                }
+            }
+        }
+
+#endif
 
         ff.fudgeQQ = top.idef.fudgeQQ;
         ff.rcoulomb = ir.rcoulomb;
@@ -246,10 +289,12 @@ bool TPR_file::do_read(System *sys, Frame *frame, const Mol_file_content &what){
         ff.rcoulomb_switch= ir.rcoulomb_switch;
         ff.rvdw_switch= ir.rvdw_switch;
         ff.rvdw= ir.rvdw;
-        ff.coulomb_type= coulomb_names[ir.coulombtype];
-        ff.coulomb_modifier= mod_names[ir.coulomb_modifier];
-        ff.vdw_type= vdw_names[ir.vdwtype];
-        ff.vdw_modifier= mod_names[ir.vdw_modifier];
+
+        // Since Gromacs 2021 interaction types are named enums, so cast to int
+        ff.coulomb_type= coulomb_names[int(ir.coulombtype)];
+        ff.coulomb_modifier= mod_names[int(ir.coulomb_modifier)];
+        ff.vdw_type= vdw_names[int(ir.vdwtype)];
+        ff.vdw_modifier= mod_names[int(ir.vdw_modifier)];
 
         ff.setup_kernels(); // Setup kernels
         ff.ready = true;
@@ -258,4 +303,6 @@ bool TPR_file::do_read(System *sys, Frame *frame, const Mol_file_content &what){
 
     return true;
 }
+
+
 

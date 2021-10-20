@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,89 +27,53 @@
 */
 
 
-
 #include "distance_search_within_sel.h"
 #include "pteros/core/pteros_error.h"
-#include "search_utils.h"
 #include <thread>
 
 using namespace std;
 using namespace pteros;
 using namespace Eigen;
 
-Distance_search_within_sel::Distance_search_within_sel(float d,
+DistanceSearchWithinSel::DistanceSearchWithinSel(float d,
                             const Selection &src,
                             const Selection &target,
                             std::vector<int>& res,
                             bool include_self,
-                            bool periodic){
-
+                            Vector3i_const_ref pbc)
+{
     cutoff = d;
-    is_periodic = periodic;    
-
-    // Get current box
+    periodic_dims = pbc;
+    is_periodic = (pbc.array()!=0).any();
+    abs_index = true; // Absolute index is enforced here!
     box = src.box();
 
-    //------------
-    // Grid creation part
-    //------------
+    res.clear();
 
-    // Determine bounding box
-    if(!is_periodic){
-        // Get the minmax of each selection
-        Vector3f min1,min2,max1,max2;
+    create_grids(src,target);
 
-        src.minmax(min1,max1);
-        target.minmax(min2,max2);
-        // Add a "halo: of size cutoff for each of them
-        min1.array() -= cutoff;
-        max1.array() += cutoff;
-        min2.array() -= cutoff;
-        max2.array() += cutoff;
-
-        // Find true bounding box
-        for(int i=0;i<3;++i){
-            overlap_1d(min1(i),max1(i),min2(i),max2(i),min(i),max(i));
-            // If no overlap just exit
-            if(max(i)==min(i)) return;
-        }
-
-    } else {
-        // Check if we have periodicity
-        if(!box.is_periodic())
-            throw Pteros_error("Asked for pbc in within selection, but there is no periodic box!");
-        // Set dimensions of the current unit cell
-        min.fill(0.0);
-        max = box.extents();
-    }
-
-    if(src.size()<10 || target.size()<10){
-        set_grid_size(min,max, std::max(src.size(),target.size()),box);
-    } else {
-        set_grid_size(min,max, std::min(src.size(),target.size()),box);
-    }
-
-    //set_grid_size(min,max, std::min(src.size(),target.size()),box);
-
-    // Allocate both grids
-    grid1.resize(NgridX,NgridY,NgridZ);
-    grid2.resize(NgridX,NgridY,NgridZ);
-
-    // Fill grids
-    abs_index = false; // Force local indexes!
     if(is_periodic){
-        grid1.populate_periodic(src,box,abs_index);
-        grid2.populate_periodic(target,box,abs_index);
+        grid1.populate_periodic(src,box,periodic_dims,abs_index);
+        grid2.populate_periodic(target,box,periodic_dims,abs_index);
     } else {
         grid1.populate(src,min,max,abs_index);
         grid2.populate(target,min,max,abs_index);
     }
 
-    do_search(src.size());
+    do_search();    
 
-    // Here we have to force absolute indexes instead!
-    abs_index = true;
-    used_to_result(res,include_self,src,target);
+    // Elements in set are unique already, need to copy to result and sort
+    copy(result.begin(),result.end(),back_inserter(res));
+    sort(res.begin(),res.end());
+
+    if(!include_self){
+        auto tmp = res;
+        res.clear();
+        set_difference(tmp.begin(),tmp.end(),target.index_begin(),target.index_end(),back_inserter(res));
+    }
 }
+
+
+
 
 

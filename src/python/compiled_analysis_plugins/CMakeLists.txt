@@ -10,6 +10,7 @@ SET(PLUGINS
     #example_plugin
     center
     contacts
+    voronoi_par
 )
 
 IF(MAKE_STANDALONE_PLUGINS)
@@ -17,7 +18,7 @@ IF(MAKE_STANDALONE_PLUGINS)
 
     foreach(plugin ${PLUGINS})
         add_executable(pteros_${plugin}
-            ${plugin}.cpp            
+            ${plugin}.cpp
             ${PROJECT_SOURCE_DIR}/include/pteros/core/pteros_error.h
         )
 

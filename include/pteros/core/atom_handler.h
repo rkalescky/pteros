@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -34,17 +34,27 @@
 
 namespace pteros {
 
+
+using AtomStateIterator = std::vector<Eigen::Vector3f>::iterator;
+using AtomStateConstIterator = std::vector<Eigen::Vector3f>::const_iterator;
+using AtomIterator = std::vector<Atom>::iterator;
+using AtomConstIterator = std::vector<Atom>::const_iterator;
+
+class Selection;
 class System;
 
 /// Auxilary type used to incapsulate the atom and its current coordinates
 /// Used internally in Selection::operator[] and in iterator access to Selection.
 /// Objects of this class should not be created by the user in normal situation.
-class Atom_proxy {    
+class AtomHandler {
+    friend class Selection;
+    friend class System;
 public:
-    Atom_proxy(): atom_ptr(nullptr), coord_ptr(nullptr), ind(-1) {}
-    Atom_proxy(System* s, int i, int fr);
-
-    void set(System* s, int i, int fr);
+    AtomHandler(){}
+    AtomHandler(const Selection& sel, int i);
+    AtomHandler(const System& sys, int i, int fr);
+    void set(const Selection& sel, int i);
+    void set(const System& sys, int i, int fr);    
 
     /// @name Inline accessors. Const and non-const versions.
     /// @{
@@ -98,11 +108,13 @@ public:
     inline Eigen::Vector3f& xyz(){ return *coord_ptr; }
     inline const Eigen::Vector3f& xyz() const { return *coord_ptr; }
 
+    /*
     inline Eigen::Vector3f& vel(){ return *v_ptr; }
     inline const Eigen::Vector3f& vel() const { return *v_ptr; }
 
     inline Eigen::Vector3f& force(){ return *f_ptr; }
     inline const Eigen::Vector3f& force() const { return *f_ptr; }
+    */
 
     inline Atom& atom(){ return *atom_ptr; }
     inline const Atom& atom() const { return *atom_ptr; }
@@ -113,25 +125,23 @@ public:
     std::string element_name() const;
 
     float vdw() const;
-    /// @}
+    ///@}
 
-    /// Equality operator
-    bool operator==(const Atom_proxy& other) const {
-        return (coord_ptr==other.coord_ptr && atom_ptr==other.atom_ptr);
-    }
-
-    /// Inequality operator
-    bool operator!=(const Atom_proxy &other) const {
-        return !(*this == other);
-    }    
-
-private:        
+private:
+    AtomIterator atom_ptr;
+    AtomStateIterator coord_ptr;
+    // Atom don't store it's own index, so store it here
     int ind;
-    Atom *atom_ptr;
-    Eigen::Vector3f* coord_ptr;
-    Eigen::Vector3f* v_ptr;
-    Eigen::Vector3f* f_ptr;
+
+    // Move handler by n atoms. For internal usage.
+    inline void advance(int n=1){
+        coord_ptr+=n;
+        atom_ptr+=n;
+        ind+=n;
+    }
 };
 
-}
+} //namespace
+
+
 

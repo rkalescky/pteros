@@ -1,25 +1,52 @@
 language: cpp
-sudo: required
-services:
-  - docker
+
+compiler:
+  - gcc
+  
+dist: focal
 
 jobs:
   include:
-    - name: "MinGW-w64_x64"
-      env: 
-      - CMAKE_BIN=x86_64-w64-mingw32-cmake
-      - DOCKER_IMG=burningdaylight/mingw-arch
-      - WITH_PYTHON=OFF
-    - name: "Ubuntu LTS x64"
-      env: 
-      - CMAKE_BIN=cmake
-      - DOCKER_IMG=burningdaylight/ubuntu-latest-devel
-      - WITH_PYTHON=ON
+  - name: "Vanilla Ubuntu 20.04, all defaults"
+  
+  - name: "Vanilla Ubuntu 20.04, no Gromacs and Babel"
+    env:
+    - CMAKE_D_OPTIONS="-DWITH_OPENBABEL=OFF -DWITH_GROMACS=OFF"
 
-before_script:
- - docker pull ${DOCKER_IMG}
+  - name: "Ubuntu 20.04, system dependencies, no Gromacs and Babel"
+    env:
+    - INSTALL_LIST="libeigen3-dev libspdlog-dev pybind11-dev" 
+      CMAKE_D_OPTIONS="-DWITH_OPENBABEL=OFF -DWITH_GROMACS=OFF -DPYBIND11_PYTHON_VERSION=3.8"
+      
+  - name: "Ubuntu 20.04, system dependencies, system babel, precompiled Gromacs"
+    env:
+    - INSTALL_LIST="libeigen3-dev libspdlog-dev pybind11-dev libopenbabel-dev" 
+      CMAKE_D_OPTIONS="-DGROMACS_SOURCES=${TRAVIS_BUILD_DIR}/../system_gromacs/gromacs_src/ -DGROMACS_LIBRARIES=${TRAVIS_BUILD_DIR}/../system_gromacs/gromacs_install/lib/libgromacs.so -DPYBIND11_PYTHON_VERSION=3.8"
+      COMPILE_GROMACS=1
+
+before_install:
+  - sudo apt-get -y install ${INSTALL_LIST} 
 
 script:
- - mkdir build
- - docker run --user $(id -u):$(id -g) --rm -v ${TRAVIS_BUILD_DIR}:/workdir:rw ${DOCKER_IMG} /bin/bash -c "cd build && ${CMAKE_BIN} -DWITH_PYTHON=${WITH_PYTHON} -DWITH_OPENBABEL=OFF -DWITH_GROMACS=OFF .. && make"
+ # Download and compile Gromacs separately if asked
+ - | 
+   if [ -z ${COMPILE_GROMACS+x} ];
+   then
+     cd .. 
+     mkdir system_gromacs && cd system_gromacs
+     git clone https://gitlab.com/gromacs/gromacs.git gromacs-src
+     mkdir gromacs-build && cd gromacs-build
+     cmake ../gromacs-src -DGMX_MPI=OFF -DGMX_GPU=OFF -DGMX_SIMD=none \
+                          -DGMX_FFT_LIBRARY=fftpack \
+                          -DBUILD_TESTING=OFF -DGMXAPI=OFF -DGMX_IMD=OFF \
+                          -DGMX_INSTALL_NBLIB_API=OFF -DGMX_OPENMP=OFF \
+                          -DGMX_THREAD_MPI=OFF -DGMX_USE_TNG=OFF \
+                          -DCMAKE_INSTALL_PREFIX=${TRAVIS_BUILD_DIR}/../system_gromacs/gromacs_install
+     cmake --build . --target install -- -j 2
+   fi    
+   cd ${TRAVIS_BUILD_DIR}
+   
+ - mkdir build && cd build
+ - cmake .. ${CMAKE_D_OPTIONS}
+ - cmake --build . -j 2
  - rm -rf build

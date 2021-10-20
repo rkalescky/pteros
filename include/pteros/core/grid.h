@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -33,16 +33,21 @@
 #include <vector>
 #include <deque>
 #include "pteros/core/selection.h"
-
-#define BOOST_DISABLE_ASSERTS
-#include "boost/multi_array.hpp"
+#include <unsupported/Eigen/CXX11/Tensor>
 
 namespace pteros {    
 
-    struct Grid_element {
-        int index;
-        Eigen::Vector3f* coor_ptr;
-        Grid_element(int i, Eigen::Vector3f* ptr): index(i),coor_ptr(ptr) {}
+    class GridCell {
+    public:
+        void add_point(int ind, Vector3f_const_ref crd);
+        void clear();
+        int get_index(int i) const {return indexes[i];}
+        Eigen::Vector3f get_coord(int i) const {return coords[i];}
+        size_t size() const {return indexes.size();}
+
+    private:
+        std::vector<int> indexes;
+        std::vector<Eigen::Vector3f> coords;
     };
 
     /**
@@ -71,7 +76,9 @@ namespace pteros {
 
         void clear();
         void resize(int X, int Y, int Z);
-        std::vector<Grid_element>& cell(int i, int j, int k){ return data[i][j][k]; }
+        GridCell& cell(int i, int j, int k){ return data(i,j,k); }
+        GridCell& cell(Vector3i_const_ref ind){ return data(ind(0),ind(1),ind(2)); }
+        const GridCell& cell(Vector3i_const_ref ind) const { return data(ind(0),ind(1),ind(2)); }
 
         /// Non-periodic populate
         void populate(const Selection& sel,bool abs_index = false);
@@ -82,18 +89,20 @@ namespace pteros {
                       bool abs_index);
 
         /// Periodic populate
-        void populate_periodic(const Selection& sel,bool abs_index = false);
+        void populate_periodic(const Selection& sel,
+                               Vector3i_const_ref pbc_dims = fullPBC,
+                               bool abs_index = false);
 
         void populate_periodic(const Selection& sel,
-                      const Periodic_box& box,
-                      bool abs_index);
-    private:        
-        boost::multi_array<std::vector<Grid_element>,3> data;
-        // Array of atomic coordinates, which have to be wrapped if periodic.
-        // This is in order not to touch real coordinates of atoms and improve speed.
-        std::deque<Eigen::Vector3f> wrapped_atoms;        
+                               const PeriodicBox& box,
+                               Vector3i_const_ref pbc_dims = fullPBC,
+                               bool abs_index = false);
+    private:
+        Eigen::Tensor<GridCell,3> data;
     };
 
 }
+
+
 
 

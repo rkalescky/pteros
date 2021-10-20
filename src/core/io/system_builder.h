@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,13 +27,33 @@
 */
 
 
+#pragma once
 
-#ifndef SEARCH_UTILS_H_INCLUDED
-#define SEARCH_UTILS_H_INCLUDED
+#include "pteros/core/system.h"
 
-// Get intersection of two 1d bars
-void overlap_1d(float a1, float a2, float b1, float b2, float& res1, float& res2);
+namespace pteros {
 
-#endif
+// Mol_file is a friend of System and can access it's internals
+// but derived *_file classes are not friends.
+// In order to access internals of the System we define special access class
+class SystemBuilder {
+public:
+    SystemBuilder(System& s): sys(&s) {}
+    SystemBuilder(System* s): sys(s) {}
+    // When destroyed builer calls assign_resindex() and duing other preparations
+    ~SystemBuilder();
+
+    void allocate_atoms(int n);
+    void set_atom(int i, const Atom& at);
+    Atom& atom(int i);
+    void add_atom(const Atom& at);
+private:
+    System* sys;
+};
+
+} // namespace
+
+
+
 
 

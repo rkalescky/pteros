@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,43 +27,29 @@
 */
 
 
+#include "bindings_util.h"
+#include "pteros/extras/gnm.h"
 
-#include "contacts_finder.h"
-#include "pteros/analysis/trajectory_reader.h"
-#include <fstream>
-
+namespace py = pybind11;
 using namespace pteros;
-using namespace std;
+using namespace pybind11::literals;
 
-int main(int argc, char* argv[]){
+void make_bindings_GNM(py::module& m){
 
-    try{
-        Options options;
-
-        parse_command_line(argc,argv,options);
-
-        cout << "Creating trajectory processor..." << endl;
-        Trajectory_reader processor(options);
-
-        // Show help if asked
-        if(argc==1){
-            cout << processor.help() << endl;
-            Contacts_finder::print_help();
-            return 0;
-        }
-
-        cout << "Creating contacts finder..." << endl;
-        processor.add_task(new Contacts_finder(options));
-
-        // Do computation
-        processor.run();
-
-
-    } catch(const Pteros_error& e) {
-        cout << "ERROR:" << e.what() << endl;
-    }
+    py::class_<GNM>(m,"GNM")
+        .def(py::init<const Selection&,float>())
+        .def(py::init<const Selection&>())
+        .def("get_eigenvector",&GNM::get_eigenvector)
+        .def("get_B_factor",&GNM::get_B_factor)
+        .def("get_subset_c_matrix",&GNM::get_subset_c_matrix)
+        .def("get_c_matrix",&GNM::get_c_matrix)
+        .def("write_eigenvectors",&GNM::write_eigenvectors)
+        .def("compute_c_matrix",&GNM::compute_c_matrix)
+        .def("write_c_matrix",&GNM::write_c_matrix)
+    ;
 
 }
+
 
 
 

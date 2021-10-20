@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,15 +27,14 @@
 */
 
 
-
 #include "pteros/core/utilities.h"
 #include "pteros/core/pteros_error.h"
 #include "pteros/core/version.h"
 #include <fstream>
-// Periodic table from VMD molfile plugins
-#include "periodic_table.h"
 #include <iostream>
 #include <string>
+// Periodic table from VMD molfile plugins
+#include "periodic_table.h"
 
 using namespace std;
 using namespace pteros;
@@ -183,7 +182,7 @@ void greeting(string tool_name)
     string s1 = "|***    Pteros molecular modeling library    ***|";
     string ver_str = fmt::format("Version: {} ({})", _version_tag, _git_revision);
     string timestamp = fmt::format("Built at: {}", _build_time);
-    string author = "(C) Semen Yesylevskyy, 2019";
+    string author = "(C) Semen Yesylevskyy, 2021";
     string cite = "Please cite: 10.1002/jcc.23943";
     string web = "Web: github.com/yesint/pteros";
     // Line
@@ -206,7 +205,22 @@ void greeting(string tool_name)
     }
 }
 
-} // namespace
+void get_element_from_atom_name(const string& name, int &anum, float &mass){
+    // Find first character, which is not digit to account for cases like 21C2
+    int i = name.find_first_not_of("1234567890");
+
+         if(name[i]=='C') { mass = 12.0; anum = 6; }
+    else if(name[i]=='O') { mass = 16.0; anum = 8; }
+    else if(name[i]=='N') { mass = 14.0; anum = 7; }
+    else if(name[i]=='S') { mass = 32.0; anum = 16; }
+    else if(name[i]=='H') { mass = 1.0;  anum = 1; }
+    else if(name[i]=='P') { mass = 31.0; anum = 15; }
+    else if(name[i]=='F') { mass = 19.0; anum = 9; }
+    else if(name[i]=='B') { mass = 11.0; anum = 5; }
+         else { mass = 1.0; anum = 0; } //default
+}
+
+} // namespace pteros
 
 
 
@@ -237,7 +251,7 @@ int Histogram::get_bin(float v)
 
 void Histogram::add(float v,float  weight)
 {
-    if(normalized) throw Pteros_error("Can't add value to normalized histogram!");
+    if(normalized) throw PterosError("Can't add value to normalized histogram!");
     int b = floor((v-minv)/d);
     if(b>=0 && b<nbins) val(b) += weight;
 }
@@ -249,7 +263,7 @@ void Histogram::add(const std::vector<float>& v)
 
 void Histogram::add_cylindrical(float r, float w, float sector, float cyl_h)
 {
-    if(normalized) throw Pteros_error("Can't add value to normalized histogram!");
+    if(normalized) throw PterosError("Can't add value to normalized histogram!");
     int b = floor((r-minv)/d);
     if(b>=0 && b<nbins){
         float r1 = pos(b)-0.5*d;
@@ -324,7 +338,7 @@ void Histogram2D::create(float minval1, float maxval1, int n1, float minval2, fl
 
 void Histogram2D::add(float v1, float v2, float weight)
 {
-    if(normalized) throw Pteros_error("Can't add value to normalized histogram!");
+    if(normalized) throw PterosError("Can't add value to normalized histogram!");
     int b1 = floor((v1-minv(0))/d(0));
     int b2 = floor((v2-minv(1))/d(1));
     if(b1>=0 && b1<nbins(0) && b2>=0 && b2<nbins(1)) val(b1,b2) += weight;
@@ -340,6 +354,11 @@ void Histogram2D::normalize(float norm)
     normalized = true;
 }
 
+float Histogram2D::value(int i, int j) const
+{
+    return val(i,j);
+}
+
 void Histogram2D::save_to_file(const string &fname)
 {
     ofstream f(fname);
@@ -351,3 +370,72 @@ void Histogram2D::save_to_file(const string &fname)
     f.close();
 }
 
+namespace pteros {
+
+int str_to_int(const string& str){
+    /*
+    int val;
+    const auto res = std::from_chars(str.data(), str.data()+str.size(),val);
+    if (res.ec == std::errc::invalid_argument) throw PterosError("Value '{}' is not INT!",str);
+    return val;
+    */
+    //from_chars is not implemented for floats in gcc...
+    stringstream ss(str);
+    int val;
+    ss >> val;
+    return val;
+}
+
+float str_to_float(const string& str){
+    /*
+    float val;
+    const auto res = std::from_chars(str.data(), str.data()+str.size(),val);
+    if (res.ec == std::errc::invalid_argument) throw PterosError("Value '{}' is not FLOAT!",str);
+    return val;
+    */
+    //from_chars is not implemented for floats in gcc...
+    stringstream ss(str);
+    float val;
+    ss >> val;
+    return val;
+}
+
+void str_to_lower_in_place(string& str){
+    std::locale loc;
+    for(auto elem: str) tolower(elem,loc);
+}
+
+void str_to_upper_in_place(string& str){
+    std::locale loc;
+    for(auto elem: str) toupper(elem,loc);
+}
+
+
+string str_to_lower_copy(const string &str)
+{
+    string s(str);
+    str_to_lower_in_place(s);
+    return s;
+}
+
+// trim from start (in place)
+static inline void ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+}
+
+// trim from end (in place)
+static inline void rtrim(std::string &s) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), s.end());
+}
+
+// trim from both ends (in place)
+void str_trim_in_place(std::string &s) {
+    ltrim(s);
+    rtrim(s);
+}
+
+} // namespace pteros

@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -28,6 +28,8 @@
 
 
 
+
+
 #include "distance_search_within_base.h"
 #include <thread>
 
@@ -35,171 +37,120 @@ using namespace std;
 using namespace pteros;
 using namespace Eigen;
 
-void Distance_search_within_base::used_to_result(vector<int>& res, bool include_self,
-                                                 const Selection& src,
-                                                 const Selection& target){
-    res.clear();
-    // Convert used to result
-    if(include_self){
-        if(abs_index){
-            for(int i=0;i<used.size();++i)
-                if(used[i].load()) res.push_back(src.index(i));
-        } else {
-            for(int i=0;i<used.size();++i)
-                if(used[i].load()) res.push_back(i);
+void DistanceSearchWithinBase::compute_chunk(int b, int e,
+                                             std::unordered_set<int>& res_buf)
+{
+    PlannedPair pair;
+    for(int ind=b;ind<e;++ind){
+        // Get array position
+        auto p = index_to_pos(ind);
+        // Apply stencil
+        for(int j=0;j<stencil.size();j+=2){
+            pair.c1 = p + stencil[j];
+            pair.c2 = p + stencil[j+1];
+            if(process_neighbour_pair(pair)){
+                search_planned_pair(pair, res_buf);
+            }
         }
-    } else {
-        vector<int> dum;
-
-        if(abs_index){
-            for(int i=0;i<used.size();++i)
-                if(used[i].load()) dum.push_back(src.index(i));
-        } else {
-            for(int i=0;i<used.size();++i)
-                if(used[i].load()) dum.push_back(i);
-        }
-
-        set_difference(dum.begin(),dum.end(),
-                       target.index_begin(),target.index_end(),
-                       back_inserter(res));
     }
 }
 
-void Distance_search_within_base::do_search(int sel_size)
-{
-    used.resize(sel_size);
-    for(int i=0;i<used.size();++i) used[i].store(false);
 
-    //------------
-    // Search part
-    //------------
+void DistanceSearchWithinBase::do_search()
+{
+    // Prepare for searching
+    result.clear();
 
     // See if we need parallelization
-    int max_N, max_dim;
-    Vector3i dims(NgridX,NgridY,NgridZ);
-    max_N = dims.maxCoeff(&max_dim);
+    int nt = std::min(size_t(Ngrid.prod()), size_t(std::thread::hardware_concurrency()));
 
-    int nt = std::min(max_N, int(std::thread::hardware_concurrency()));
+    if(nt==1){
+        // Serial
+        compute_chunk(0,Ngrid.prod(),result);
 
-    if(nt>1){
-        // Parallel search
+    } else {
+        // Thread parallel
+        vector<unordered_set<int>> res_buf(nt);
 
-        // Determine parts for each thread
-        vector<int> b(nt),e(nt);
-        int cur=0;
-        for(int i=0;i<nt-1;++i){
-            b[i]=cur;
-            cur += dims(max_dim)/nt;
-            e[i]=cur;
-        }
-        b[nt-1]=cur;
-        e[nt-1]=dims(max_dim);
-
-        // Launch threads
         vector<thread> threads;
+        int chunk = floor(Ngrid.prod()/nt);
+
         for(int i=0;i<nt;++i){
+            int b = chunk*i;
+            int e = (i<nt-1) ? chunk*(i+1) : Ngrid.prod();
+
+            // Launch thread
             threads.emplace_back(
-                                   std::bind(
-                                       &Distance_search_within_base::do_part,
-                                       this,
-                                       max_dim,
-                                       b[i],
-                                       e[i]
-                                   )                                
-                             );
+            [&,b,e,i](){
+                compute_chunk(b,e, res_buf[i]);
+            }
+            );
         }
 
         // Wait for threads
         for(auto& t: threads) t.join();
 
-    } else {
-        // Serial search, no need to launch separate thread
-        do_part(max_dim,0,dims(max_dim));
-    }
-
-}
-
-
-void Distance_search_within_base::do_part(int dim, int _b, int _e){
-    Vector3i b(0,0,0);
-    Vector3i e(NgridX,NgridY,NgridZ);
-    int dim_max = e(dim);
-    b(dim)= _b;
-    e(dim)= _e;
-
-    int i,j,k,c,t,ind;
-    Nlist_t nlist; // Local nlist
-    nlist.data.reserve(27);
-    nlist.wrapped.reserve(27);
-
-    for(i=b(0);i<e(0);++i){
-        for(j=b(1);j<e(1);++j){
-            for(k=b(2);k<e(2);++k){
-
-                // Search in central cell
-                search_in_pair_of_cells(i,j,k, //src cell
-                                        i,j,k, //target cell
-                                        false);
-                // Get nlist
-                get_nlist(i,j,k,nlist);
-
-                // Cycle over nlist
-                for(c=0;c<nlist.data.size();++c){
-                    const Vector3i& cell = nlist.data[c];
-
-                    search_in_pair_of_cells(i,j,k, //src cell
-                                            cell(0),cell(1),cell(2), //target cell
-                                            nlist.wrapped[c] && is_periodic);
-                }
-
-            }
+        // Collect results
+        for(int i=0;i<nt;++i){
+            // Copy to result guarantied to be unique, but not sorted
+            result.insert(begin(res_buf[i]),end(res_buf[i]));
         }
     }
-
 }
 
-void Distance_search_within_base::search_in_pair_of_cells(int sx, int sy, int sz, // src cell
-                             int tx, int ty, int tz, // target cell
-                             bool is_periodic)
+// grid1 is the source which is searched
+void DistanceSearchWithinBase::search_between_cells(Vector3i_const_ref c1,
+                                                       Vector3i_const_ref c2,
+                                                       Vector3i_const_ref wrapped,
+                                                       std::unordered_set<int> &res_buffer)
 {
-    int Ns,Nt,ind,s,t;
-    float d;
+    const GridCell& cell1 = grid1.cell(c1);
+    const GridCell& cell2 = grid2.cell(c2);
+
+    // The cells could be not adjucent if one of them is wrapped around
+    // but this only happens in peridic case and is treated automatically
+
+    int N1 = cell1.size();
+    int N2 = cell2.size();
+
+    if(N1*N2==0) return; // Nothing to do
+
     float cutoff2 = cutoff*cutoff;
 
-    Ns = grid1.cell(sx,sy,sz).size(); //src
-    Nt = grid2.cell(tx,ty,tz).size(); //target
+    if((wrapped.array()>0).any()){
 
-    if(Ns*Nt==0) return; // Nothing to do
-
-    const vector<Grid_element>& sv = grid1.cell(sx,sy,sz);
-    const vector<Grid_element>& tv = grid2.cell(tx,ty,tz);
-
-    for(s=0;s<Ns;++s){
-        ind = sv[s].index; // Local index here
-        // Skip already used source points
-        if(used[ind].load()) continue;
-
-        Vector3f* p = sv[s].coor_ptr; // Coord of source point
-
-        if(is_periodic){
-            for(t=0;t<Nt;++t){
-                d = box.distance_squared(*(tv[t].coor_ptr),*p);
+        for(int i1=0;i1<N1;++i1){
+            Vector3f p = cell1.get_coord(i1); // Coord of point in grid1
+            for(int i2=0;i2<N2;++i2){
+                float d = box.distance_squared(cell2.get_coord(i2), p, wrapped);
                 if(d<=cutoff2){
-                    used[ind].store(true);
-                    break;
+                    res_buffer.insert(cell1.get_index(i1));
                 }
             }
-        } else {
-            for(t=0;t<Nt;++t){
-                d = (*(tv[t].coor_ptr)-*p).squaredNorm();
-                if(d<=cutoff2){
-                    used[ind].store(true);
-                    break;
+        }
+
+    } else {
+
+        for(int i1=0;i1<N1;++i1){
+            Vector3f p = cell1.get_coord(i1); // Coord of point in grid1
+            for(int i2=0;i2<N2;++i2){                
+                float d = (cell2.get_coord(i2)-p).squaredNorm();                
+                if(d<=cutoff2){                    
+                    res_buffer.insert(cell1.get_index(i1));
                 }
             }
         }
 
     }
 }
+
+void DistanceSearchWithinBase::search_planned_pair(const PlannedPair &pair, std::unordered_set<int> &res_buffer)
+{
+    search_between_cells(pair.c1,pair.c2,pair.wrapped,res_buffer);
+    if(pair.c1!=pair.c2){
+        search_between_cells(pair.c2,pair.c1,pair.wrapped,res_buffer);
+    }
+}
+
 
 

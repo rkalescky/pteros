@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,9 +27,9 @@
 */
 
 
-
 #include "pteros/extras/gnm.h"
 #include "pteros/core/pteros_error.h"
+#include "pteros/core/logging.h"
 #include "pteros/core/distance_search.h"
 #include <fstream>
 #include <Eigen/Core>
@@ -40,34 +40,24 @@ using namespace std;
 using namespace pteros;
 using namespace Eigen;
 
-void GNM::compute(Selection& sel, float cutoff){
+GNM::GNM(const Selection &sel, float cutoff){
     int i,j,k;
-
-    cout << "Running GNM..."<<endl;
 
     N = sel.size();
     eigenvalues.resize(N-1);
     eigenvectors.resize(N,N-1);
 
-    cout << "Constructing GNM Kirkgoff matrix. Cut-off: " << cutoff << " Size: " << N << endl;
+    LOG()->debug("Constructing GNM Kirkgoff matrix. Cut-off: {}, Size: {}",cutoff,N);
+
     MatrixXf kirk(N,N); //Kirgoff matrix
     float d, time1, time2;
 
     kirk.fill(0.0);
-    // Compute off-diagonal elements
-    /*
-    for(i=0;i<N-1;++i)        
-        for(j=i+1;j<N;++j){            
-            d = (sel.xyz(i)-sel.xyz(j)).norm();
-            if(d<=cutoff){
-                kirk(i,j)= -1.0;
-                kirk(j,i)= -1.0;
-            }
-        }
-    */
 
     vector<Eigen::Vector2i> bon;
-    search_contacts(cutoff,sel,bon);
+    vector<float> dist;
+    search_contacts(cutoff,sel,bon,dist,false,noPBC);
+
     for(int i=0; i<bon.size(); ++i){
         kirk(bon[i](0),bon[i](1)) = kirk(bon[i](1),bon[i](0)) = -1.0;
     }
@@ -75,26 +65,32 @@ void GNM::compute(Selection& sel, float cutoff){
     // Compute diagonal elements
     for(i=0;i<N;++i) kirk(i,i) = -kirk.col(i).sum();
 
-    cout << "Computing eigenvectors...";
-    time1 = clock();
+    LOG()->debug("Computing eigenvectors...");
 
+    time1 = clock();
     Eigen::SelfAdjointEigenSolver<MatrixXf> solver(kirk);
     eigenvalues = solver.eigenvalues();
     eigenvectors = solver.eigenvectors();
     // Vectors are already sorted, cool :)
-
     time2 = clock();
-    cout << " Done in " << (time2-time1)/CLOCKS_PER_SEC << " s." << endl;
+
+    LOG()->debug(" Done in {} s.",(time2-time1)/CLOCKS_PER_SEC);
 }
 
-GNM::GNM(Selection& sel, float cutoff){
-    compute(sel,cutoff);
+Eigen::VectorXf GNM::get_eigenvector(int i) const
+{
+    return eigenvectors.col(i);
+}
+
+VectorXf GNM::get_B_factor() const
+{
+    return b;
 }
 
 void GNM::write_eigenvectors(string fname, int v1, int v2){
-    if(v1<0 || v2>N-2 || v2<v1) throw Pteros_error("Can't write these eigenvectors!");
+    if(v1<0 || v2>N-2 || v2<v1) throw PterosError("Can't write these eigenvectors!");
     ofstream f(fname.c_str());
-    if(!f) throw Pteros_error("Can't open file "+fname+" for writing!");
+    if(!f) throw PterosError("Can't open file "+fname+" for writing!");
     int i,j;
     for(i=0;i<N;++i){
         f << i << " ";
@@ -104,7 +100,7 @@ void GNM::write_eigenvectors(string fname, int v1, int v2){
     f.close();
 }
 
-void GNM::compute_c_matrix(bool normalize){
+void GNM::compute_c_matrix(){
     int i,j,k;
     cout << "Calculating correlations..." << endl;
     c.resize(N,N);
@@ -119,10 +115,14 @@ void GNM::compute_c_matrix(bool normalize){
         for(j=i+1;j<N;++j)
             c(j,i) = c(i,j);
 
-    if(normalize)
-        for(i=0;i<N;++i)
-            for(j=0;j<N;++j)
-                c(i,j) = c(i,j)/sqrt(c(i,i)*c(j,j));
+    // Save B-factors
+    b.resize(N);
+    b = c.diagonal();
+
+    // Normalize by self-correlations to get correct cross-correlations
+    for(i=0;i<N;++i)
+        for(j=0;j<N;++j)
+            c(i,j) = c(i,j)/sqrt(c(i,i)*c(j,j));
 }
 
 void GNM::compute_p_matrix(){
@@ -164,7 +164,7 @@ void GNM::write_c_matrix(string fname){
 
     int i,j;
     ofstream f(fname.c_str());
-    if(!f) throw Pteros_error("Can't open file "+fname+" for writing!");
+    if(!f) throw PterosError("Can't open file "+fname+" for writing!");
     for(i=0;i<N;++i){
         for(j=0;j<N;++j)
             f << c(i,j) << " ";
@@ -179,7 +179,7 @@ void GNM::write_p_matrix(string fname){
 
     int i,j;
     ofstream f(fname.c_str());
-    if(!f) throw Pteros_error("Can't open file "+fname+" for writing!");
+    if(!f) throw PterosError("Can't open file "+fname+" for writing!");
 
     for(i=0;i<N;++i){
         for(j=0;j<N;++j)
@@ -189,4 +189,21 @@ void GNM::write_p_matrix(string fname){
     f.close();
 }
 
+MatrixXf GNM::get_subset_c_matrix(ArrayXi_const_ref subset) const
+{
+    int sz = subset.size();
+    MatrixXf ret(sz,sz);
 
+    for(int i=0;i<sz;++i){
+        for(int j=0;j<sz;++j){
+            ret(i,j) = c(subset[i],subset[j]);
+        }
+    }
+
+    return ret;
+}
+
+MatrixXf GNM::get_c_matrix() const
+{
+    return c;
+}

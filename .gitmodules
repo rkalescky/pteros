@@ -1,9 +1,0 @@
-[submodule "external/eigen"]
-	path = external/eigen
-	url = ../../eigenteam/eigen-git-mirror
-[submodule "external/spdlog"]
-	path = external/spdlog
-	url = ../../gabime/spdlog
-[submodule "external/pybind11"]
-	path = external/pybind11
-	url = ../../pybind/pybind11

@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,18 +27,16 @@
 */
 
 
-
 #pragma once
 
-#include <iostream>
 #include <string>
-#include <memory>
+//#include <memory>
 #include <map>
 #include <vector>
 #include <functional>
 #include <Eigen/Core>
-#include <Eigen/Geometry>
-#include "pteros/core/atom_proxy.h"
+//#include <Eigen/Geometry>
+#include "pteros/core/atom_handler.h"
 #include "pteros/core/system.h"
 #include "pteros/core/typedefs.h"
 
@@ -46,27 +44,27 @@ namespace pteros {
 
 // Forward declaration of friend classes
 class System;
-class Selection_parser;
+class SelectionParser;
 
 
 /** @brief Selection class.
 *
 *   Selections are key objects in Pteros. Technically speaking the selection
-*   is just an array, which contains indexes of selected atoms in particlar system.
+*   is just an array, which contains indexes of selected atoms in particular system.
 *   Selection does not hold the copies of the atoms or their coordinates, it
-*   just points to them serving like a handy alias for certain subset of atoms.
+*   just points to them serving like an alias for certain subset of atoms.
 *   Thus selections may overlap arbitrarily.
 *   Selections are used to perform various operations on the group of selected atoms.
 *   The changes become immediately visible to all other selections, which point to
 *   some of changed atoms.
 *   Each selection is bound to particular System. There are neither 'parentless' selection nor the
 *   selections, which combine the atoms from different systems.
-*   Selections are created using the syntax, which is very similar to those used in VMD.
+*   Selections are created using the syntax, which is very similar to those used in VMD but with
+*   many useful extensions.
 */
 class Selection {
-  // System and Selection are friends because they are closely integrated.
   friend class System;
-  friend class Selection_parser;
+  friend class SelectionParser;
   friend class Grid_searcher;
 
   public:
@@ -74,7 +72,7 @@ class Selection {
     /// @name Constructors and operators
     /// @{
 
-    /// Default constructor for absolutely empty selection.
+    /// Default constructor for empty selection.
     Selection();
 
     /** Associates selection with the system @param sys,
@@ -82,15 +80,14 @@ class Selection {
     */
     explicit Selection(const System& sys);
 
-    /** Main constructor.
+    /** Textual selection constructor.
     *   @param sys System pointed by this selection
     *   @param str Selection string    
     */
     Selection(const System& sys, std::string str, int fr = 0);
 
-    /** Constructor, which creates selection from the interval of indexes
-        instead of selection string.
-        It is much faster then parsing corresponding string, but is limited
+    /** Constructor, which creates selection from the interval of indexes.
+        It is much faster then parsing selection corresponding string, but is limited
         to contigous interval of indexes.
         @param sys System pointed by this selection
         @param ind1 First index in interval
@@ -98,7 +95,7 @@ class Selection {
      */
     Selection(const System& sys, int ind1, int ind2);
 
-    /// Constructor from vector of indexes
+    /// Constructor from the vector of indexes
     /// Vector may be in any order and may contain duplicates.
     Selection(const System& sys, const std::vector<int>& ind);
 
@@ -108,13 +105,13 @@ class Selection {
               std::vector<int>::iterator it1,
               std::vector<int>::iterator it2);
 
-    /** Constructor which takes user-defined callback
+    /** Constructor which takes user-defined callback function.
       Callback takes the system as first argument, target frame number as the second
       and the vector to be filled by selected atom indexes.
       Vector may be filled in any order and may contain duplicates.
       \warning
       Resulting selection is neither coordinate-dependent nor text-based.
-      It will not recompute itself on the frame change even if it involves atom coordinates.
+      It won't recompute itself on the frame change even if it involves coordinates.
     */
     Selection(const System& sys,
               const std::function<void(const System&,int,std::vector<int>&)>& callback,
@@ -154,15 +151,25 @@ class Selection {
      \code
      Selection sel(sys,"name CA");
      for(auto a: sel){
-        cout << a.name() << " " << a.X() << endl;
+        cout << a.name() << " " << a.x() << endl;
      }
      \endcode
 
      Otherwise it is slower than conventional syntax like sel.name(i)
      */
-    Atom_proxy operator[](int ind);
+    AtomHandler operator[](int ind);
 
-    Atom_proxy operator[](const std::pair<int,int>& ind_fr);
+    /** Indexing operator which sets both index and frame.
+     * Takes a pair of values.
+      \code
+      Selection sel(sys,"name CA");
+      int at = 123;
+      // Assign x coorditate of atom at for frame 0 from frame 1.
+      sel[{at,0}].x() = sel[{at,1}].x();
+      \endcode
+
+    */
+    AtomHandler operator[](const std::pair<int,int>& ind_fr);
 
     /// Writing selection to stream.
     /// Outputs indexes as a space separated list
@@ -195,6 +202,9 @@ class Selection {
 
     /// Append absolute index to selection
     void append(int ind);
+
+    /// Append several selections to this one
+    void append(const std::vector<Selection>& sel_vec);
 
     /// Remove all atoms of sel from current selection
     void remove(const Selection& sel);
@@ -236,21 +246,21 @@ class Selection {
     */
     void modify(const std::function<void(const System&,int,std::vector<int>&)>& callback, int fr = 0);
 
-    /// Convenience function, which combines set_system and modify(str)
+    /// Convenience method, which combines set_system and modify(str)
     void modify(const System& sys, std::string str, int fr = 0);
 
-    /// Convenience function, which combines set_system and modify(int,int)
+    /// Convenience method, which combines set_system and modify(int,int)
     void modify(const System& sys, int ind1, int ind2);
 
-    /// Convenience function, which combines set_system and modify(vector<int>)
+    /// Convenience method, which combines set_system and modify(vector<int>)
     void modify(const System& sys, const std::vector<int>& ind);
 
-    /// Convenience function, which combines set_system and modify(iter,iter)
+    /// Convenience method, which combines set_system and modify(iter,iter)
     void modify(const System& sys,
                 std::vector<int>::iterator it1,
                 std::vector<int>::iterator it2);
 
-    /// Convenience function, which combines set_system and modify(callback)
+    /// Convenience method, which combines set_system and modify(callback)
     void modify(const System& sys, const std::function<void(const System&,int,std::vector<int>&)>& callback, int fr = 0);
 
     /** Recomputes selection without re-parsing selection text.
@@ -523,6 +533,11 @@ class Selection {
                            Array3i_const_ref pbc = noPBC,
                            int pbc_atom = -1) const;
 
+    // Get the center of selection with user-supplied weights
+    Eigen::Vector3f center(const std::vector<float>& weights,
+                           Array3i_const_ref pbc = noPBC,
+                           int pbc_atom = -1) const;
+
     /// Get minimal and maximal coordinates in selection
     void minmax(Vector3f_ref min, Vector3f_ref max) const;
 
@@ -570,7 +585,7 @@ class Selection {
     This is not checked automatically!
     In this case use one of unwrapping options first.
     */
-    Eigen::Vector3f dipole(bool is_charged=false, Array3i_const_ref pbc = fullPBC, int pbc_atom = -1) const;
+    Eigen::Vector3f dipole(bool as_charged=false, Array3i_const_ref pbc = fullPBC, int pbc_atom = -1) const;
 
     /// Get distance between two atoms (periodic in given dimensions if needed).
     /// \note
@@ -616,6 +631,7 @@ class Selection {
       \warning
       If the size of selection is larger than 1/2 of the box size in
       any dimension unwrap() will not work as expected and will not make selection "compact"!
+      This is \e not checked automatically.
     */
     void unwrap(Array3i_const_ref pbc = fullPBC, int pbc_atom = -1);
 
@@ -711,10 +727,9 @@ class Selection {
     *   If @param b is not set or -1 it means current frame
     *   If @param e is not set or -1 it means the last frame
     */
-    // Can't be made const because of internal calls
-    void write(std::string fname, int b=-1,int e=-1);
+    void write(std::string fname, int b=-1,int e=-1) const;
 
-    void write(const std::unique_ptr<Mol_file>& handler, Mol_file_content what,int b=-1,int e=-1);    
+    void write(const std::unique_ptr<FileHandler>& handler, FileContent what,int b=-1,int e=-1) const;
     /// @}
 
 
@@ -727,15 +742,11 @@ class Selection {
 
     /// Returns true if selection was created from text string and false if it was
     /// constructed 'by hand' by appending indexes or other selections
-    bool text_based() const {
-        return sel_text!="";
-    }
+    bool text_based() const;
 
     /// Returns true if selection is coordinate-dependent and is able to recompute
     /// itself on the change of frame
-    bool coord_dependent() const {
-        return (bool)parser;
-    }
+    bool coord_dependent() const;
 
     /// "Flattens" selection by removing coordinate dependence and making it not text-based.
     /// Resulting selection is equivalent to plain set of indexes "index i1 i2 i3..."
@@ -801,7 +812,6 @@ class Selection {
         using namespace std;
         parts.clear();
         using Ret = decltype(callback(*this,0));
-        // Map
         map<Ret,vector<int> > m;
         for(int i=0; i<size(); ++i){
             m[callback(*this,i)].push_back(index(i));
@@ -960,8 +970,8 @@ class Selection {
         This is a convenience method. The same box is returned by all selection
         which point to the same frame.
     */
-    inline Periodic_box& box() { return system->traj[frame].box; }
-    inline const Periodic_box& box() const { return system->traj[frame].box; }
+    inline PeriodicBox& box() { return system->traj[frame].box; }
+    inline const PeriodicBox& box() const { return system->traj[frame].box; }
 
     /** Returns time stamp of the frame pointed by selection
         The same as:
@@ -977,7 +987,7 @@ class Selection {
     /// @}
 
 protected:
-    // Row text of selection
+    // Raw text of selection
     std::string sel_text;    
     // Indexes of atoms in selection
     std::vector<int> _index;
@@ -988,7 +998,7 @@ protected:
     int frame;
 
     // Holds an instance of selection parser
-    std::unique_ptr<Selection_parser> parser;
+    std::unique_ptr<SelectionParser> parser;
     void allocate_parser();
     void sort_and_remove_duplicates();    
     void process_pbc_atom(int& a) const;
@@ -999,26 +1009,27 @@ protected:
 /// Random-access forward iterator for Selection
 class Selection::iterator {
 public:
-    typedef Atom_proxy value_type;
-    typedef int difference_type;
-    typedef Atom_proxy* pointer;
-    typedef Atom_proxy& reference;
-    typedef std::forward_iterator_tag iterator_category;
+    using value_type = AtomHandler;
+    using difference_type = size_t;
+    using pointer = AtomHandler*;
+    using reference = AtomHandler&;
+    using iterator_category = std::random_access_iterator_tag;
 
-    iterator(Selection* sel, int pos): ind(pos), sel_ptr(sel) {}
+    iterator(const Selection& sel, int i): ind(i) {
+        proxy.set(sel,ind);
+    }
     iterator operator++(int junk) { iterator tmp = *this; ++ind; return tmp; }
-    iterator& operator++() { ++ind; return *this; }
-    iterator& operator+(int i) {ind+=i; return *this;}
-    iterator& operator-(int i) {ind-=i; return *this;}
-    reference operator*() { proxy.set(sel_ptr->get_system(),sel_ptr->index(ind),sel_ptr->get_frame()); return proxy; }
-    pointer   operator->() { proxy.set(sel_ptr->get_system(),sel_ptr->index(ind),sel_ptr->get_frame()); return &proxy; }
-    bool operator==(const iterator& rhs) { return ind == rhs.ind && sel_ptr==rhs.sel_ptr; }
+    iterator& operator++() { ++ind; proxy.advance(); return *this; }
+    iterator& operator+(int i) {ind+=i; proxy.advance(i); return *this;}
+    iterator& operator-(int i) {ind-=i; proxy.advance(-i); return *this;}
+    reference operator*() { return proxy; }
+    pointer   operator->() { return &proxy; }
+    bool operator==(const iterator& rhs) { return ind == rhs.ind; }
     bool operator!=(const iterator& rhs) { return !(*this==rhs); }
 
 private:
     int ind;
-    Selection* sel_ptr;
-    Atom_proxy proxy;
+    AtomHandler proxy;
 };
 
 /// Checks if several selections overlap
@@ -1029,12 +1040,14 @@ bool check_selection_overlap(const std::vector<Selection> &sel_vec);
 /// If cutoff is 0 the cutoff from topology is used.
 /// fr = -1 computes for current frame of selection 1.
 Eigen::Vector2f non_bond_energy(const Selection& sel1,
-                                       const Selection& sel2,
-                                       float cutoff = 0,
-                                       int fr = -1,
-                                       bool pbc = true);
+                                const Selection& sel2,
+                                float cutoff = 0,
+                                int fr = -1,
+                                bool pbc = true);
 
 } // namespace pteros
+
+
 
 
 

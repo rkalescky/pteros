@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,30 +27,28 @@
 */
 
 
-
-#ifndef DISTANCE_SEARCH_WITHIN_INCLUDED
-#define DISTANCE_SEARCH_WITHIN_INCLUDED
+#pragma once
 
 #include "pteros/core/selection.h"
 
 namespace pteros {       
 
 /// Class for within searching
-class Distance_search_within {
+class DistanceSearchWithin {
 public:
-    Distance_search_within();
+    DistanceSearchWithin();
 
-    Distance_search_within(float d,
+    DistanceSearchWithin(float d,
                            const Selection& src,
                            bool absolute_index = false,
-                           bool periodic = false);
+                           Vector3i_const_ref pbc = fullPBC);
 
-    virtual ~Distance_search_within();
+    virtual ~DistanceSearchWithin();
 
     void setup(float d,
                const Selection& src,
                bool absolute_index = false,
-               bool periodic = false);
+               Vector3i_const_ref pbc = fullPBC);
 
     void search_within(Vector3f_const_ref coord,
                        std::vector<int> &res);
@@ -60,12 +58,13 @@ public:
                        bool include_self=true);
 
 private:
-    class Distance_search_within_impl;
-    std::unique_ptr<Distance_search_within_impl> p;
+    class DistanceSearchWithinImpl;
+    std::unique_ptr<DistanceSearchWithinImpl> p;
 };
 
 }
 
-#endif
+
+
 
 

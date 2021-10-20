@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -28,30 +28,29 @@
 
 
 
-#ifndef DISTANCE_SEARCH_CONTACTS_2SEL_H_INCLUDED
-#define DISTANCE_SEARCH_CONTACTS_2SEL_H_INCLUDED
+#pragma once
 
 #include "distance_search_contacts.h"
 
 namespace pteros {       
 
-class Distance_search_contacts_2sel: public Distance_search_contacts {
+class DistanceSearchContacts2sel: public DistanceSearchContacts {
 public:
-    Distance_search_contacts_2sel(float d, const Selection& sel1, const Selection& sel2,
-                                  std::vector<Eigen::Vector2i>& pairs,
-                                  bool absolute_index = false,
-                                  bool periodic = false,
-                                  std::vector<float>* dist_vec = nullptr);
-protected:
-    void create_grids(const Selection &sel1, const Selection &sel2);
 
-    void do_part(int dim, int _b, int _e,
-                 std::deque<Eigen::Vector2i>& bon,
-                 std::deque<float>* dist_vec) override;
+    DistanceSearchContacts2sel(float d,
+                                  const Selection& sel1,
+                                  const Selection& sel2,
+                                  std::vector<Eigen::Vector2i>& res_pairs,
+                                  std::vector<float>& res_distances,
+                                  bool absolute_index = false,
+                                  Vector3i_const_ref pbc = fullPBC);
+protected:
+
+    virtual void search_planned_pair(const PlannedPair& pair,
+                                     std::vector<Eigen::Vector2i> &pairs_buffer,
+                                     std::vector<float> &distances_buffer) override;
 };
 
 }
-
-#endif
 
 

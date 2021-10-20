@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,26 +27,12 @@
 */
 
 
-
 #include "mol2_file.h"
 #include "pteros/core/pteros_error.h"
 
 using namespace pteros;
 using namespace std;
 
-#ifndef USE_OPENBABEL
+Mol2File::Mol2File(string &fname): BabelWrapper(fname){ }
 
-MOL2_file::MOL2_file(string &fname): VMD_molfile_plugin_wrapper(fname){
-    plugin = molfile_plugins["mol2"];
-}
-
-void MOL2_file::do_write(const Selection &sel, const Mol_file_content &what){
-    throw Pteros_error("In order to write MOL2 files you need to compile with OpenBabel support!");
-}
-
-#else
-
-MOL2_file::MOL2_file(string &fname): Babel_wrapper(fname){ }
-
-#endif
 

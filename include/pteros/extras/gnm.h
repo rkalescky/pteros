@@ -7,10 +7,10 @@
  *
  * https://github.com/yesint/pteros
  *
- * (C) 2009-2020, Semen Yesylevskyy
+ * (C) 2009-2021, Semen Yesylevskyy
  *
  * All works, which use Pteros, should cite the following papers:
- *  
+ *
  *  1.  Semen O. Yesylevskyy, "Pteros 2.0: Evolution of the fast parallel
  *      molecular analysis library for C++ and python",
  *      Journal of Computational Chemistry, 2015, 36(19), 1480–1488.
@@ -27,9 +27,7 @@
 */
 
 
-
-#ifndef GNM_H_INCLUDED
-#define GNM_H_INCLUDED
+#pragma once
 
 #include "pteros/core/selection.h"
 #include <Eigen/Core>
@@ -39,24 +37,31 @@ namespace pteros {
 /** Implementation of the Gaussian Network Model (GNM) protein model.
   */
 class GNM {
-    public:        
-        Eigen::MatrixXf eigenvectors;
-        Eigen::VectorXf eigenvalues;
-        Eigen::MatrixXf c,p;
+public:
+    GNM(const Selection& sel, float cutoff=0.7);
 
-        GNM(Selection& sel, float cutoff);
+    Eigen::VectorXf get_eigenvector(int i) const;
+    Eigen::VectorXf get_B_factor() const;
 
-        void compute(Selection& sel, float cutoff);
-        void write_eigenvectors(std::string fname, int v1, int v2);
-        void compute_c_matrix(bool normalize=false);
-        void compute_p_matrix();
-        void write_c_matrix(std::string fname);
-        void write_p_matrix(std::string fname);
+    void write_eigenvectors(std::string fname, int v1, int v2);
+    void compute_c_matrix();
+    void compute_p_matrix();
+    void write_c_matrix(std::string fname);
+    void write_p_matrix(std::string fname);
+
+    Eigen::MatrixXf get_subset_c_matrix(ArrayXi_const_ref subset) const;
+    Eigen::MatrixXf get_c_matrix() const;
 private:
-        int N;
+    int N;
+    Selection* sel;
+    Eigen::MatrixXf eigenvectors;
+    Eigen::VectorXf eigenvalues;
+    Eigen::MatrixXf c,p;
+    Eigen::VectorXf b; // B-factor
 };
 
 }
-#endif // GNM_H_INCLUDED
+
+
 
 
