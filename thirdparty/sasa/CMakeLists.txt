@@ -15,6 +15,7 @@ elseif(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "arm64")
     target_compile_options(sasa PRIVATE "-O2")
 else()
     return ()
- 
+endif()
+
 target_include_directories(sasa PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
