@@ -9,5 +9,5 @@ add_library(sasa STATIC
     vectorize_sse.h
 )
 
-target_compile_options(sasa PRIVATE "-ftree-vectorize -O2")
+target_compile_options(sasa PRIVATE "-O3")
 target_include_directories(sasa PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
